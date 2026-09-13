@@ -15,8 +15,8 @@ use git::{
 use gpui::{
     AnyElement, App, AppContext as _, AsyncWindowContext, ClipboardItem, Context, Entity,
     EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, ParentElement,
-    PromptLevel, Render, ScrollHandle, StatefulInteractiveElement as _, Styled, Task, WeakEntity,
-    Window, actions,
+    PromptLevel, Render, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, Task,
+    WeakEntity, Window, actions,
 };
 use language::{
     Buffer, Capability, DiskState, File, LanguageRegistry, LineEnding, OffsetRangeExt as _,
@@ -87,6 +87,7 @@ pub struct CommitView {
     remote: Option<GitRemote>,
     is_shallow_boundary: bool,
     file_filter: Option<RepoPath>,
+    _editor_event_subscription: Subscription,
     _load_diff_task: Task<Result<()>>,
 }
 
@@ -336,6 +337,11 @@ impl CommitView {
 
             editor
         });
+        let editor_event_subscription = cx.subscribe(&editor, |_, _, event: &EditorEvent, cx| {
+            if event == &(EditorEvent::SelectionsChanged { local: true }) {
+                cx.emit(event.clone())
+            }
+        });
         let commit_sha = Arc::<str>::from(commit.sha.as_ref());
 
         let repository_clone = repository.clone();
@@ -527,6 +533,7 @@ impl CommitView {
             remote,
             is_shallow_boundary,
             file_filter,
+            _editor_event_subscription: editor_event_subscription,
             _load_diff_task: load_diff_task,
         }
     }
@@ -1351,6 +1358,12 @@ impl Item for CommitView {
                     editor
                 }
             });
+            let editor_event_subscription =
+                cx.subscribe(&editor, |_, _, event: &EditorEvent, cx| {
+                    if event == &(EditorEvent::SelectionsChanged { local: true }) {
+                        cx.emit(event.clone())
+                    }
+                });
             let language_registry = project.read(cx).languages().clone();
             let message = cx.new(|cx| {
                 Markdown::new(
@@ -1374,6 +1387,7 @@ impl Item for CommitView {
                 remote: self.remote.clone(),
                 is_shallow_boundary: self.is_shallow_boundary,
                 file_filter: self.file_filter.clone(),
+                _editor_event_subscription: editor_event_subscription,
                 _load_diff_task: Task::ready(Ok(())),
             }
         })))
